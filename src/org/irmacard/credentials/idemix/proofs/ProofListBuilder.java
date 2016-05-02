@@ -70,13 +70,21 @@ public class ProofListBuilder {
 	private BigInteger secret;
 	private BigInteger skCommitment;
 
+	private final boolean isSig;
+
 	public ProofListBuilder(BigInteger context, BigInteger nonce) {
+		this(context, nonce, false);
+	}
+
+	public ProofListBuilder(BigInteger context, BigInteger nonce, boolean isSig) {
 		this.context = context;
 		this.nonce = nonce;
 		this.skCommitment = new BigInteger(new IdemixSystemParameters().l_m_commit, new Random());
 
 		toHash.add(context);
+		this.isSig = isSig;
 	}
+
 
 	/**
 	 * Add a proof for the specified credential and attributes.
@@ -132,9 +140,15 @@ public class ProofListBuilder {
 		toHash.add(nonce);
 		BigInteger[] toHashArray = toHash.toArray(new BigInteger[toHash.size()]);
 
-		BigInteger challenge = Crypto.sha256Hash(Crypto.asn1Encode(toHashArray));
 
-		ProofList proofs = new ProofList();
+		BigInteger challenge;
+		if (isSig) {
+			challenge = Crypto.sha256Hash(Crypto.asn1SigEncode(toHashArray));
+		} else {
+			challenge = Crypto.sha256Hash(Crypto.asn1Encode(toHashArray));
+		}
+
+		ProofList proofs = new ProofList(isSig);
 
 		for (int i = 0; i < credentials.size(); ++i) {
 			proofs.add(commitments.get(i).createProof(challenge));

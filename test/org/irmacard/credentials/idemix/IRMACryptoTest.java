@@ -120,6 +120,21 @@ public class IRMACryptoTest {
 	}
 
 	@Test
+	public void testASN1SigEncoding() {
+		byte[] enc = Crypto.asn1SigEncode(new BigInteger("1"),
+				new BigInteger("65"), new BigInteger("1025"));
+
+		byte[] expected = { 0x30, 0x10, //0x10 is length of block
+				0x01, 0x01, (byte) 0xff, // Boolean that indicates signature, -1 represents 0xff = true
+				0x02, 0x01, 0x03, // The number of elements is additionally encoded
+				0x02, 0x01, 0x01,
+				0x02, 0x01, 0x41,
+				0x02, 0x02, 0x04, 0x01 };
+
+		assertTrue(Arrays.equals(enc, expected));
+	}
+
+	@Test
 	public void testProofU() {
 		Random rnd = new Random();
 		IdemixSystemParameters params = pk.getSystemParameters();
@@ -284,6 +299,58 @@ public class IRMACryptoTest {
 				.build();
 
 		assertTrue("Combined disclosure proofs should verify", collection.verify(context, nonce1, true));
+	}
+
+	@Test
+	public void testSignature() {
+		CLSignature signature1 = CLSignature.signMessageBlock(sk, pk, attributes);
+		IdemixCredential cred1 = new IdemixCredential(pk, attributes, signature1);
+
+		CLSignature signature2 = CLSignature.signMessageBlock(sk, pk, attributes);
+		IdemixCredential cred2 = new IdemixCredential(pk, attributes, signature2);
+
+		Random rnd = new Random();
+		IdemixSystemParameters params = pk.getSystemParameters();
+		BigInteger context = new BigInteger(params.l_h, rnd);
+		BigInteger nonce1 = new BigInteger(params.l_statzk, rnd);
+
+		boolean isSig = true;
+		ProofList collection = new ProofListBuilder(context, nonce1, isSig)
+				.addProofD(cred1, Arrays.asList(1, 2))
+				.addProofD(cred2, Arrays.asList(1, 3))
+				.build();
+
+		assertTrue("Combined signature should verify", collection.verify(context, nonce1, true));
+	}
+
+	/**
+	 * Test if nonce used for signature cannot be reused in a disclosureproof
+	 */
+	@Test
+	public void testDomainSeparation() {
+		CLSignature signature1 = CLSignature.signMessageBlock(sk, pk, attributes);
+		IdemixCredential cred1 = new IdemixCredential(pk, attributes, signature1);
+
+		CLSignature signature2 = CLSignature.signMessageBlock(sk, pk, attributes);
+		IdemixCredential cred2 = new IdemixCredential(pk, attributes, signature2);
+
+		Random rnd = new Random();
+		IdemixSystemParameters params = pk.getSystemParameters();
+		BigInteger context = new BigInteger(params.l_h, rnd);
+		BigInteger nonce1 = new BigInteger(params.l_statzk, rnd);
+
+		// Create an IRMA signature
+		boolean isSig = true;
+		ProofList collection = new ProofListBuilder(context, nonce1, isSig)
+				.addProofD(cred1, Arrays.asList(1, 2))
+				.addProofD(cred2, Arrays.asList(1, 3))
+				.build();
+
+		// Make sure we're verifying this signature as disclosure proof
+		collection.unsetSig();
+
+		assertTrue("Combined signature should NOT verify as disclosure proof", !collection
+				.verify(context, nonce1, true));
 	}
 
 	@Test
